@@ -1,0 +1,23 @@
+# Build requirements
+setuptools>=65.0.0
+wheel>=0.38.0
+
+# Web server
+gunicorn==21.2.0
+
+# Flask and its dependencies
+Flask==3.0.3
+Flask-Cors==4.0.1
+
+# TensorFlow and ML dependencies
+tensorflow==2.15.0
+numpy==1.26.4
+
+# OpenCV headless (no GUI dependencies)
+opencv-python-headless==4.10.0.84
+
+# Pillow (Image Library)
+Pillow==10.4.0
+
+# Other dependencies
+requests==2.32.3
