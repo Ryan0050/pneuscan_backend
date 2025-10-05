@@ -1,41 +1,37 @@
 from flask import Flask, request, jsonify
-from tensorflow.keras.models import load_model
+import tensorflow as tf
 import cv2
 import numpy as np
 from flask_cors import CORS
 import os
 
 app = Flask(__name__)
-
-# Fix CORS to allow your Vercel domain
 CORS(app, resources={
     r"/*": {
-        "origins": [
-            "https://pneuscan.vercel.app",
-            "http://localhost:3000"
-        ],
+        "origins": ["https://pneuscan.vercel.app", "http://localhost:3000"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": False
     }
 })
 
-# Load the model
-model_path = os.path.join(os.path.dirname(__file__), 'models', 'pneumonia_model.keras')
-model = load_model(model_path)
+# Load TFLite model
+model_path = os.path.join(os.path.dirname(__file__), 'models', 'pneumonia_model.tflite')
+interpreter = tf.lite.Interpreter(model_path=model_path)
+interpreter.allocate_tensors()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
 labels = ['PNEUMONIA', 'NORMAL']
 img_size = 200
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def home():
     return jsonify({"message": "PneuScan API is running", "status": "ok"})
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({"status": "healthy"}), 200
-
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 def predict():
-    # Handle preflight OPTIONS request
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -48,9 +44,14 @@ def predict():
     try:
         for img_file in images:
             img_arr = cv2.imdecode(np.frombuffer(img_file.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
-            resized_arr = cv2.resize(img_arr, (img_size, img_size)).reshape(1, img_size, img_size, 1)
-            normalized_img = resized_arr / 255.0
-            prediction = model.predict(normalized_img, verbose=0)
+            resized_arr = cv2.resize(img_arr, (img_size, img_size))
+            input_data = resized_arr.reshape(1, img_size, img_size, 1).astype(np.float32)
+            normalized_img = input_data / 255.0
+            
+            interpreter.set_tensor(input_details[0]['index'], normalized_img)
+            interpreter.invoke()
+            prediction = interpreter.get_tensor(output_details[0]['index'])
+            
             confidence = float(prediction[0][0])
             
             if confidence > 0.80:
@@ -63,7 +64,7 @@ def predict():
         return jsonify(predictions), 200
     
     except Exception as e:
-        print(f"Error: {str(e)}")  # This will show in Railway logs
+        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
